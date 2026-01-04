@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Data & Models (Too big for git)
+data/
+results/
+mlflow_artifacts/
+mlruns/
+
+# Docker Volumes
+postgres_data/
+
+# IDE settings
+.vscode/
+.idea/

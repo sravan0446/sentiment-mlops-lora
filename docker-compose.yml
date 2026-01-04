@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # 1. Shared Database
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mlflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "user"]
+      interval: 5s
+      retries: 5
+
+  # 2. MLflow Server
+# 2. MLflow Server
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: peft-mlflow-1
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://user:password@postgres:5432/mlflow_db
+      - MLFLOW_ARTIFACT_ROOT=/opt/mlflow/artifacts
+    volumes:
+      - ./mlflow_artifacts:/opt/mlflow/artifacts
+    command: mlflow server --backend-store-uri postgresql://user:password@postgres:5432/mlflow_db --default-artifact-root /opt/mlflow/artifacts --host 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+  # 3. Airflow Webserver & Scheduler (Combined for simplicity)
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@postgres:5432/airflow_db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      # Connect Airflow to MLflow
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./mlflow_artifacts:/opt/mlflow/artifacts # So Airflow can save models
+    ports:
+      - "8080:8080"
+    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Peter --lastname Parker --role Admin --email admin@example.com && airflow webserver & airflow scheduler"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
